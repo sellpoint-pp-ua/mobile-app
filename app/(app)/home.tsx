@@ -96,7 +96,8 @@ export default function Home() {
     try {
       await clearTokens();
     } finally {
-      router.replace("/(auth)/sign-in");
+      // БЕЗ групп в URL
+      router.replace("/sign-in");
     }
   }
 
@@ -127,12 +128,14 @@ export default function Home() {
         <Card
           title={t("nav_entities")}
           subtitle="Перегляд, створення та редагування даних."
-          onPress={() => router.push("/(app)/entities")}
+          // БЕЗ групп в URL
+          onPress={() => router.push("/entities")}
         />
         <Card
           title={t("nav_profile")}
           subtitle="Облікові дані та налаштування."
-          onPress={() => router.push("/(app)/profile")}
+          // БЕЗ групп в URL
+          onPress={() => router.push("/profile")}
         />
       </View>
 
@@ -140,12 +143,14 @@ export default function Home() {
       <View style={{ marginTop: 28, gap: 10 }}>
         <Button
           label="+ Створити запис"
-          onPress={() => router.push("/(app)/entities/create")}
+          // БЕЗ групп в URL
+          onPress={() => router.push("/entities/create")}
           kind="primary"
         />
         <Button
           label="Відкрити список"
-          onPress={() => router.push("/(app)/entities")}
+          // БЕЗ групп в URL
+          onPress={() => router.push("/entities")}
           kind="ghost"
         />
         <Button label="Вийти" onPress={handleLogout} kind="danger" />

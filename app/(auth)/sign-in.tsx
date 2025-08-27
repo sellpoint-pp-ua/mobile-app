@@ -8,7 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, Link } from "expo-router";
 import { useAuth } from "../../src/hooks/useAuth";
 import { t } from "../../src/i18n/ua";
 
@@ -37,7 +37,7 @@ export default function SignIn() {
   async function onSubmit() {
     if (!canSubmit) return;
     const ok = await signIn({ login, password });
-    if (ok) router.replace("/(app)/home");
+    if (ok) router.replace("/home"); // БЕЗ групп в URL
   }
 
   return (
@@ -46,7 +46,6 @@ export default function SignIn() {
       behavior={Platform.select({ ios: "padding", android: undefined })}
     >
       <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 36 }}>
-        {/* Заголовок */}
         <Text style={{ fontSize: 28, fontWeight: "800", color: COLORS.accent }}>
           {t("auth_title")}
         </Text>
@@ -54,7 +53,6 @@ export default function SignIn() {
           {t("auth_subtitle")}
         </Text>
 
-        {/* Помилка логіну */}
         {error ? (
           <View
             style={{
@@ -72,9 +70,7 @@ export default function SignIn() {
           </View>
         ) : null}
 
-        {/* Поля форми */}
         <View style={{ marginTop: 18, gap: 14 }}>
-          {/* Логін */}
           <View>
             <Text style={{ color: COLORS.muted, marginBottom: 6 }}>
               {t("auth_login")}
@@ -99,7 +95,6 @@ export default function SignIn() {
             />
           </View>
 
-          {/* Пароль */}
           <View>
             <Text style={{ color: COLORS.muted, marginBottom: 6 }}>
               {t("auth_password")}
@@ -138,7 +133,6 @@ export default function SignIn() {
           </View>
         </View>
 
-        {/* Кнопка входу */}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={onSubmit}
@@ -160,10 +154,20 @@ export default function SignIn() {
           )}
         </TouchableOpacity>
 
-        {/* Підказка */}
         <Text style={{ color: COLORS.secondary, marginTop: 10, fontSize: 12 }}>
           {t("auth_hint")}
         </Text>
+
+        {/* Ссылка на регистрацию — БЕЗ групп в URL */}
+        <View style={{ marginTop: 18, alignItems: "center" }}>
+          <Link href="/sign-up" asChild>
+            <TouchableOpacity activeOpacity={0.85}>
+              <Text style={{ color: COLORS.accent, fontWeight: "800" }}>
+                {t("auth_sign_up_link") || "Зареєструватись"}
+              </Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
