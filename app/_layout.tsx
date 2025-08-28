@@ -14,8 +14,8 @@ export default function RootLayout() {
     (async () => {
       const token = await getAccessToken();
       const inAuth = segments[0] === "(auth)";
-      if (!token && !inAuth) router.replace("/(auth)/sign-in");
-      if (token && inAuth) router.replace("/(app)/home");
+      if (!token && !inAuth) router.replace("/sign-in");
+if (token && inAuth) router.replace("/home");
     })();
   }, [segments.join("/")]);
 
