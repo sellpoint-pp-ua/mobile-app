@@ -1,27 +1,46 @@
-import "../src/lib/apiConfig";
-import { Stack, useRouter, useSegments } from "expo-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { getAccessToken } from "../src/lib/auth";
+import React from "react";
+import { Stack } from "expo-router";
+import { Image, StyleSheet, View, LogBox } from "react-native";
+import Logo from "@/assets/logo.svg";
+import { AuthProvider } from "@/src/auth/AuthProvider";
 
-const queryClient = new QueryClient();
+LogBox.ignoreLogs([/expo-notifications: Android Push notifications/]);
+
+const HEADER_BG = { uri: "https://sellpoint.pp.ua/background.png" };
 
 export default function RootLayout() {
-  const router = useRouter();
-  const segments = useSegments();
-
-  useEffect(() => {
-    (async () => {
-      const token = await getAccessToken();
-      const inAuth = segments[0] === "(auth)";
-      if (!token && !inAuth) router.replace("/sign-in");
-if (token && inAuth) router.replace("/home");
-    })();
-  }, [segments.join("/")]);
-
   return (
-    <QueryClientProvider client={queryClient}>
-      <Stack screenOptions={{ headerShown: false }} />
-    </QueryClientProvider>
+    <AuthProvider>
+      <Stack
+        initialRouteName="(main)/home"
+        screenOptions={{
+          headerBackground: () => (
+            <View style={StyleSheet.absoluteFillObject}>
+              <Image source={HEADER_BG} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(255,255,255,0.35)" }]} />
+            </View>
+          ),
+          headerTitle: () => <Logo width={120} height={32} />,
+          headerTitleAlign: "center",
+          headerTintColor: "#101010",
+          headerTitleStyle: { fontWeight: "700", color: "#000" },
+          headerStyle: { backgroundColor: "transparent" },
+          headerShadowVisible: false,
+          headerBackVisible: false,
+          headerLeft: () => null,
+        }}
+      >
+        <Stack.Screen name="(main)/home" />
+        <Stack.Screen name="(main)/catalog" />
+        <Stack.Screen name="(main)/cart" />
+        <Stack.Screen name="(main)/favorites" />
+        <Stack.Screen name="(main)/profile" />
+        <Stack.Screen name="(main)/search" />
+        <Stack.Screen name="product/id" />
+        <Stack.Screen name="(auth)/sign-in" />
+        <Stack.Screen name="(auth)/sign-up" />
+        <Stack.Screen name="(auth)/verify-email" />
+      </Stack>
+    </AuthProvider>
   );
 }

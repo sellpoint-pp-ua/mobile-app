@@ -1,182 +1,312 @@
-import React, { useMemo, useState } from "react";
+import * as React from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
+  View,
   Text,
   TextInput,
-  View,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
-import { Link } from "expo-router";
-import { t } from "../../src/i18n/ua";
+import { useRouter } from "expo-router";
+import { apiRegister, apiSendVerificationCode } from "@/src/auth/authService.mobile";
+import { setToken } from "@/src/auth/token";
 
-// Бело-фиолетовая палитра под Prom
-const UI = {
-  bg: "#ffffff",
-  text: "#111827",
-  sub: "#6b7280",
-  border: "#e5e7eb",
-  primary: "#7C3AED",
-  primaryText: "#ffffff",
-  danger: "#ef4444",
-};
+const BG = "#ffffff";
+const TEXT = "#111111";
+const MUTED = "#6b7280";
+const ACCENT = "#4563d1";
+const BORDER = "#e5e7eb";
+const ERROR = "#dc2626";
 
-export default function SignUp() {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [agree, setAgree] = useState(false);
-  const [touched, setTouched] = useState<{[k:string]:boolean}>({});
+export default function SignUpScreen() {
+  const router = useRouter();
 
-  const errors = useMemo(() => {
-    const e: Record<string, string | undefined> = {};
-    if (!fullName.trim() || fullName.trim().length < 2) e.fullName = t("err_name") || "Вкажіть ім’я";
-    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRe.test(email.trim())) e.email = t("err_email") || "Невірний email";
-    if (password.length < 6) e.password = t("err_password") || "Мінімум 6 символів";
-    if (!agree) e.agree = t("err_agree") || "Потрібна згода";
-    return e;
-  }, [fullName, email, password, agree]);
+  const [firstName, setFirstName] = React.useState("");
+  const [lastName, setLastName]   = React.useState("");
+  const [email, setEmail]         = React.useState("");
+  const [password, setPassword]   = React.useState("");
+  const [confirm, setConfirm]     = React.useState("");
+  const [agree, setAgree]         = React.useState(false);
 
-  const isValid = Object.keys(errors).length === 0;
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState<string>("");
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
 
-  function onSubmit() {
-    if (!isValid) {
-      // пометим поля как touched, чтобы увидеть ошибки
-      setTouched({ fullName: true, email: true, password: true, agree: true });
-      return;
+  function validate(): boolean {
+    const e: Record<string, string> = {};
+    if (!firstName.trim()) e.firstName = "Вкажіть імʼя";
+    if (!lastName.trim())  e.lastName  = "Вкажіть прізвище";
+    if (!email.trim())     e.email     = "Вкажіть e-mail";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = "Некоректний e-mail";
+    if (!password)         e.password  = "Вкажіть пароль";
+    else if (password.length < 8) e.password = "Мінімум 8 символів";
+    if (!confirm)          e.confirm   = "Повторіть пароль";
+    else if (confirm !== password) e.confirm = "Паролі не співпадають";
+    if (!agree)            e.agree     = "Необхідно погодитися з умовами";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function onSubmit() {
+    setErr("");
+    if (!validate()) return;
+
+    setLoading(true);
+    try {
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+
+      const regResult = await apiRegister({
+        fullName,
+        email: email.trim(),
+        password,
+      });
+
+      const token = typeof regResult === "string" ? regResult : (regResult as any)?.token;
+      if (token) {
+        await setToken(token);
+      } else {
+        throw new Error("Токен не отримано після реєстрації");
+      }
+
+      try {
+        await apiSendVerificationCode("uk");
+      } catch {}
+
+      router.replace("/verify-email" as any);
+    } catch (e: any) {
+      const m =
+        typeof e?.message === "string" && e.message.trim().length > 0
+          ? e.message
+          : "Не вдалося зареєструватися.";
+      setErr(m);
+    } finally {
+      setLoading(false);
     }
-    Alert.alert(
-      t("verify_check_inbox_title") || "Перевірте пошту",
-      (t("verify_check_inbox_msg") || "Ми надіслали код підтвердження на ваш email.") +
-        "\n\n(На наступному кроці підключимо реальний API)"
-    );
   }
 
   return (
     <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: BG }}
       behavior={Platform.select({ ios: "padding", android: undefined })}
-      style={{ flex: 1, backgroundColor: UI.bg }}
     >
-      <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
-        <Text style={{ color: UI.text, fontSize: 28, fontWeight: "800", marginBottom: 8 }}>
-          {t("sign_up_title") || "Реєстрація"}
-        </Text>
-        <Text style={{ color: UI.sub, marginBottom: 16 }}>
-          {t("sign_up_subtitle") || "Створіть акаунт, щоб продовжити"}
-        </Text>
+      <ScrollView contentContainerStyle={S.container} keyboardShouldPersistTaps="handled">
+        <View style={{ alignItems: "center", marginBottom: 8 }}>
+          <Text style={S.subtitle}>Створіть новий акаунт</Text>
+        </View>
 
-        {/* Ім’я */}
-        <Label>{t("label_name") || "Ім’я"}</Label>
-        <Field>
-          <Input
-            value={fullName}
-            onChangeText={setFullName}
-            onBlur={() => setTouched((s) => ({ ...s, fullName: true }))}
-            placeholder="Іван Іваненко"
-          />
-        </Field>
-        {!!touched.fullName && errors.fullName && <Err>{errors.fullName}</Err>}
+        <View style={S.row2}>
+          <View style={{ flex: 1 }}>
+            <Text style={S.label}>Імʼя</Text>
+            <TextInput
+              value={firstName}
+              onChangeText={(t) => {
+                setFirstName(t);
+                if (errors.firstName) setErrors((p) => ({ ...p, firstName: "" }));
+                if (err) setErr("");
+              }}
+              placeholder="Ваше імʼя"
+              placeholderTextColor={MUTED}
+              style={[S.input, errors.firstName && S.inputError]}
+              autoCapitalize="words"
+            />
+            {errors.firstName ? <Text style={S.errText}>{errors.firstName}</Text> : null}
+          </View>
+          <View style={{ width: 12 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={S.label}>Прізвище</Text>
+            <TextInput
+              value={lastName}
+              onChangeText={(t) => {
+                setLastName(t);
+                if (errors.lastName) setErrors((p) => ({ ...p, lastName: "" }));
+                if (err) setErr("");
+              }}
+              placeholder="Ваше прізвище"
+              placeholderTextColor={MUTED}
+              style={[S.input, errors.lastName && S.inputError]}
+              autoCapitalize="words"
+            />
+            {errors.lastName ? <Text style={S.errText}>{errors.lastName}</Text> : null}
+          </View>
+        </View>
 
-        {/* Email */}
-        <Label style={{ marginTop: 12 }}>{t("label_email") || "Email"}</Label>
-        <Field>
-          <Input
+        <View style={S.field}>
+          <Text style={S.label}>E-mail</Text>
+          <TextInput
             value={email}
-            onChangeText={setEmail}
-            onBlur={() => setTouched((s) => ({ ...s, email: true }))}
+            onChangeText={(t) => {
+              setEmail(t);
+              if (errors.email) setErrors((p) => ({ ...p, email: "" }));
+              if (err) setErr("");
+            }}
             placeholder="name@example.com"
+            placeholderTextColor={MUTED}
+            style={[S.input, errors.email && S.inputError]}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="email-address"
           />
-        </Field>
-        {!!touched.email && errors.email && <Err>{errors.email}</Err>}
+          {errors.email ? <Text style={S.errText}>{errors.email}</Text> : null}
+        </View>
 
-        {/* Пароль */}
-        <Label style={{ marginTop: 12 }}>{t("label_password") || "Пароль"}</Label>
-        <Field>
-          <Input
+        <View style={S.field}>
+          <Text style={S.label}>Пароль</Text>
+          <TextInput
             value={password}
-            onChangeText={setPassword}
-            onBlur={() => setTouched((s) => ({ ...s, password: true }))}
-            placeholder="••••••••"
+            onChangeText={(t) => {
+              setPassword(t);
+              if (errors.password) setErrors((p) => ({ ...p, password: "" }));
+              if (err) setErr("");
+            }}
+            placeholder="Мінімум 8 символів"
+            placeholderTextColor={MUTED}
+            style={[S.input, errors.password && S.inputError]}
             secureTextEntry
           />
-        </Field>
-        {!!touched.password && errors.password && <Err>{errors.password}</Err>}
+          {errors.password ? <Text style={S.errText}>{errors.password}</Text> : null}
+        </View>
 
-        {/* Згода */}
+        <View style={S.field}>
+          <Text style={S.label}>Повторіть пароль</Text>
+          <TextInput
+            value={confirm}
+            onChangeText={(t) => {
+              setConfirm(t);
+              if (errors.confirm) setErrors((p) => ({ ...p, confirm: "" }));
+              if (err) setErr("");
+            }}
+            placeholder="Повторіть пароль"
+            placeholderTextColor={MUTED}
+            style={[S.input, errors.confirm && S.inputError]}
+            secureTextEntry
+          />
+          {errors.confirm ? <Text style={S.errText}>{errors.confirm}</Text> : null}
+        </View>
+
         <Pressable
-          onPress={() => { setAgree((a) => !a); setTouched((s)=>({ ...s, agree: true })); }}
-          style={{ flexDirection: "row", alignItems: "center", marginTop: 14 }}
+          onPress={() => {
+            setAgree((v) => !v);
+            if (errors.agree) setErrors((p) => ({ ...p, agree: "" }));
+          }}
+          style={({ pressed }) => [S.checkboxRow, pressed && { opacity: 0.9 }]}
         >
-          <Text style={{ fontSize: 18 }}>{agree ? "☑" : "☐"}</Text>
-          <Text style={{ color: UI.text, marginLeft: 8 }}>
-            {t("agree_text") || "Погоджуюсь з умовами та політикою"}
+          <View style={[S.checkbox, agree && S.checkboxOn]} />
+          <Text style={S.checkboxLabel}>
+            Я погоджуюсь з умовами використання та політикою конфіденційності
           </Text>
         </Pressable>
-        {!!touched.agree && errors.agree && <Err>{errors.agree}</Err>}
+        {errors.agree ? <Text style={S.errText}>{errors.agree}</Text> : null}
 
-        {/* CTA */}
+        {err ? (
+          <View style={S.alert}>
+            <Text style={S.alertText}>{err}</Text>
+          </View>
+        ) : null}
+
         <Pressable
           onPress={onSubmit}
-          disabled={!isValid}
-          style={{
-            marginTop: 18,
-            backgroundColor: isValid ? UI.primary : "#C4B5FD",
-            borderRadius: 14,
-            paddingVertical: 14,
-            alignItems: "center",
-          }}
+          disabled={loading}
+          style={({ pressed }) => [
+            S.primaryBtn,
+            pressed && { opacity: 0.9 },
+            loading && { opacity: 0.6 },
+          ]}
         >
-          <Text style={{ color: UI.primaryText, fontWeight: "800" }}>
-            {t("sign_up_cta") || "Зареєструватись"}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={S.primaryText}>Створити акаунт</Text>
+          )}
         </Pressable>
 
-        {/* Лінк назад на вхід */}
-        <View style={{ marginTop: 16, alignItems: "center" }}>
-          <Link href="/sign-in">
-            <Text style={{ color: UI.primary, fontWeight: "700" }}>
-              {t("go_to_sign_in") || "Увійти"}
-            </Text>
-          </Link>
-        </View>
+        <Pressable
+          onPress={() => router.push("/sign-in" as any)}
+          style={({ pressed }) => [S.linkBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={S.linkText}>Вже є акаунт? Увійти</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [S.secondaryBtn, pressed && { opacity: 0.9 }]}
+        >
+          <Text style={S.secondaryText}>Назад</Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-/** Мелкие атомарные компоненты для читабельности */
-function Label({ children, style }: any) {
-  return <Text style={[{ color: UI.sub, marginBottom: 6 }, style]}>{children}</Text>;
-}
-function Field({ children }: any) {
-  return (
-    <View
-      style={{
-        borderWidth: 1,
-        borderColor: UI.border,
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        backgroundColor: "#fff",
-      }}
-    >
-      {children}
-    </View>
-  );
-}
-function Input(props: React.ComponentProps<typeof TextInput>) {
-  return (
-    <TextInput
-      placeholderTextColor="#9CA3AF"
-      style={{ height: 48, color: UI.text }}
-      {...props}
-    />
-  );
-}
-function Err({ children }: any) {
-  return <Text style={{ color: UI.danger, marginTop: 6 }}>{children}</Text>;
-}
+const S = StyleSheet.create({
+  container: {
+    padding: 16,
+    paddingTop: 20,
+    paddingBottom: 32,
+    backgroundColor: BG,
+    flexGrow: 1,
+  },
+  subtitle: { color: MUTED, fontSize: 16, textAlign: "center" },
+
+  row2: { flexDirection: "row", marginTop: 14 },
+  field: { marginTop: 14 },
+  label: { color: TEXT, marginBottom: 6, fontWeight: "600" },
+  input: {
+    borderWidth: 2,
+    borderColor: BORDER,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.select({ ios: 12, android: 10, default: 12 }),
+    backgroundColor: "#fff",
+    color: TEXT,
+  },
+  inputError: { borderColor: "#fecaca", backgroundColor: "#fff" },
+  errText: { color: ERROR, marginTop: 6 },
+
+  checkboxRow: { flexDirection: "row", alignItems: "center", marginTop: 14 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: BORDER,
+    marginRight: 10,
+    backgroundColor: "#fff",
+  },
+  checkboxOn: { backgroundColor: ACCENT, borderColor: ACCENT },
+  checkboxLabel: { color: TEXT, flex: 1 },
+
+  alert: {
+    backgroundColor: "#fee2e2",
+    borderColor: "#fecaca",
+    borderWidth: 1,
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 16,
+  },
+  alertText: { color: ERROR },
+
+  primaryBtn: {
+    marginTop: 18,
+    backgroundColor: ACCENT,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  primaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+
+  linkBtn: { marginTop: 12, alignItems: "center" },
+  linkText: { color: ACCENT, fontWeight: "700" },
+
+  secondaryBtn: {
+    marginTop: 12,
+    borderColor: BORDER,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  secondaryText: { color: TEXT, fontWeight: "700" },
+});
