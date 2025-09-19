@@ -1,174 +1,225 @@
-import { useState } from "react";
+import * as React from "react";
 import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
+  StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
-import { useRouter, Link } from "expo-router";
-import { useAuth } from "../../src/hooks/useAuth";
-import { t } from "../../src/i18n/ua";
+import { useRouter } from "expo-router";
+import { apiLogin } from "@/src/auth/authService.mobile";
+import { useAuth } from "@/src/auth/AuthProvider";
+import {
+  registerForPushNotificationsAsync,
+  notifyWelcome,
+  sendPushTokenToBackend,
+} from "@/src/notifications/push";
 
-const COLORS = {
-  bg: "#0B0C10",
-  card: "#12161C",
-  field: "#14181F",
-  border: "#2A2F36",
-  text: "#FFFFFF",
-  muted: "#C5C6C7",
-  secondary: "#9aa0a6",
-  accent: "#66FCF1",
-  danger: "#ef4444",
-};
+const BG = "#ffffff";
+const TEXT = "#111111";
+const MUTED = "#6b7280";
+const ACCENT = "#4563d1";
+const BORDER = "#e5e7eb";
+const ERROR = "#dc2626";
 
-export default function SignIn() {
+export default function SignInScreen() {
   const router = useRouter();
-  const { signIn, loading, error } = useAuth();
 
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPass, setShowPass] = useState(false);
+  const auth = useAuth() as any;
+  const reload = auth?.reload;
+  const setTokenAndReload = auth?.setTokenAndReload;
 
-  const canSubmit = login.trim().length > 0 && password.length > 0 && !loading;
+  const [login, setLogin] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState<string>("");
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  function validate(): boolean {
+    const e: Record<string, string> = {};
+    if (!login.trim()) e.login = "Введіть e-mail або логін";
+    if (!password) e.password = "Введіть пароль";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
 
   async function onSubmit() {
-    if (!canSubmit) return;
-    const ok = await signIn({ login, password });
-    if (ok) router.replace("/home"); // БЕЗ групп в URL
+    setErr("");
+    if (!validate()) return;
+
+    setLoading(true);
+    try {
+      await apiLogin({ login: login.trim(), password });
+
+      if (typeof setTokenAndReload === "function") {
+        await setTokenAndReload();
+      } else if (typeof reload === "function") {
+        await reload();
+      }
+
+      try {
+        const expoToken = await registerForPushNotificationsAsync();
+        if (expoToken) await sendPushTokenToBackend(expoToken);
+      } catch {}
+
+      await notifyWelcome();
+
+      router.replace("/home" as any);
+    } catch (e: any) {
+      const m =
+        typeof e?.message === "string" && e.message.trim().length > 0
+          ? e.message
+          : "Не вдалося увійти. Перевірте дані.";
+      setErr(m);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: COLORS.bg }}
+      style={{ flex: 1, backgroundColor: BG }}
       behavior={Platform.select({ ios: "padding", android: undefined })}
     >
-      <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 36 }}>
-        <Text style={{ fontSize: 28, fontWeight: "800", color: COLORS.accent }}>
-          {t("auth_title")}
-        </Text>
-        <Text style={{ color: COLORS.muted, marginTop: 6 }}>
-          {t("auth_subtitle")}
-        </Text>
+      <ScrollView contentContainerStyle={S.container} keyboardShouldPersistTaps="handled">
+        <View style={{ alignItems: "center", marginBottom: 8 }}>
+          <Text style={S.title}>Вхід</Text>
+          <Text style={S.subtitle}>Увійдіть до свого акаунту</Text>
+        </View>
 
-        {error ? (
-          <View
-            style={{
-              backgroundColor: "#251313",
-              borderColor: COLORS.danger,
-              borderWidth: 1,
-              padding: 12,
-              borderRadius: 12,
-              marginTop: 16,
+        <View style={S.field}>
+          <Text style={S.label}>E-mail або логін</Text>
+          <TextInput
+            value={login}
+            onChangeText={(t) => {
+              setLogin(t);
+              if (errors.login) setErrors((p) => ({ ...p, login: "" }));
+              if (err) setErr("");
             }}
-          >
-            <Text style={{ color: "#ff9e9e", fontWeight: "600" }}>
-              {String(error)}
-            </Text>
+            placeholder="name@example.com або username"
+            placeholderTextColor={MUTED}
+            style={[S.input, errors.login && S.inputError]}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            returnKeyType="next"
+          />
+          {errors.login ? <Text style={S.errText}>{errors.login}</Text> : null}
+        </View>
+
+        <View style={S.field}>
+          <Text style={S.label}>Пароль</Text>
+          <TextInput
+            value={password}
+            onChangeText={(t) => {
+              setPassword(t);
+              if (errors.password) setErrors((p) => ({ ...p, password: "" }));
+              if (err) setErr("");
+            }}
+            placeholder="Ваш пароль"
+            placeholderTextColor={MUTED}
+            style={[S.input, errors.password && S.inputError]}
+            secureTextEntry
+            returnKeyType="go"
+            onSubmitEditing={() => !loading && onSubmit()}
+          />
+          {errors.password ? <Text style={S.errText}>{errors.password}</Text> : null}
+        </View>
+
+        {err ? (
+          <View style={S.alert}>
+            <Text style={S.alertText}>{err}</Text>
           </View>
         ) : null}
 
-        <View style={{ marginTop: 18, gap: 14 }}>
-          <View>
-            <Text style={{ color: COLORS.muted, marginBottom: 6 }}>
-              {t("auth_login")}
-            </Text>
-            <TextInput
-              value={login}
-              onChangeText={setLogin}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              placeholder={t("auth_login_placeholder")}
-              placeholderTextColor={COLORS.secondary}
-              style={{
-                backgroundColor: COLORS.field,
-                color: COLORS.text,
-                padding: 12,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: COLORS.border,
-              }}
-              returnKeyType="next"
-            />
-          </View>
-
-          <View>
-            <Text style={{ color: COLORS.muted, marginBottom: 6 }}>
-              {t("auth_password")}
-            </Text>
-            <View
-              style={{
-                backgroundColor: COLORS.field,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: COLORS.border,
-                flexDirection: "row",
-                alignItems: "center",
-                paddingRight: 8,
-              }}
-            >
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder={t("auth_password_placeholder")}
-                placeholderTextColor={COLORS.secondary}
-                secureTextEntry={!showPass}
-                style={{ flex: 1, color: COLORS.text, padding: 12 }}
-                returnKeyType="done"
-                onSubmitEditing={onSubmit}
-              />
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => setShowPass((v) => !v)}
-                style={{ paddingVertical: 6, paddingHorizontal: 8 }}
-              >
-                <Text style={{ color: COLORS.accent, fontWeight: "700" }}>
-                  {showPass ? t("hide") : t("show")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
+        <Pressable
           onPress={onSubmit}
-          disabled={!canSubmit}
-          style={{
-            marginTop: 18,
-            backgroundColor: canSubmit ? COLORS.accent : "#2d3a45",
-            borderRadius: 14,
-            paddingVertical: 14,
-            alignItems: "center",
-          }}
+          disabled={loading}
+          style={({ pressed }) => [
+            S.primaryBtn,
+            pressed && { opacity: 0.9 },
+            loading && { opacity: 0.6 },
+          ]}
         >
-          {loading ? (
-            <ActivityIndicator />
-          ) : (
-            <Text style={{ color: COLORS.bg, fontSize: 16, fontWeight: "800" }}>
-              {t("auth_submit")}
-            </Text>
-          )}
-        </TouchableOpacity>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={S.primaryText}>Увійти</Text>}
+        </Pressable>
 
-        <Text style={{ color: COLORS.secondary, marginTop: 10, fontSize: 12 }}>
-          {t("auth_hint")}
-        </Text>
+        <Pressable
+          onPress={() => router.push("/sign-up" as any)}
+          style={({ pressed }) => [S.linkBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={S.linkText}>Немає акаунта? Зареєструватися</Text>
+        </Pressable>
 
-        {/* Ссылка на регистрацию — БЕЗ групп в URL */}
-        <View style={{ marginTop: 18, alignItems: "center" }}>
-          <Link href="/sign-up" asChild>
-            <TouchableOpacity activeOpacity={0.85}>
-              <Text style={{ color: COLORS.accent, fontWeight: "800" }}>
-                {t("auth_sign_up_link") || "Зареєструватись"}
-              </Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-      </View>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [S.secondaryBtn, pressed && { opacity: 0.9 }]}
+        >
+          <Text style={S.secondaryText}>Назад</Text>
+        </Pressable>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
+const S = StyleSheet.create({
+  container: {
+    padding: 16,
+    paddingTop: 20,
+    paddingBottom: 32,
+    backgroundColor: BG,
+    flexGrow: 1,
+  },
+  title: { color: TEXT, fontSize: 24, fontWeight: "800" },
+  subtitle: { color: MUTED, marginTop: 6, textAlign: "center" },
+
+  field: { marginTop: 14 },
+  label: { color: TEXT, marginBottom: 6, fontWeight: "600" },
+  input: {
+    borderWidth: 2,
+    borderColor: BORDER,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.select({ ios: 12, android: 10, default: 12 }),
+    backgroundColor: "#fff",
+    color: TEXT,
+  },
+  inputError: { borderColor: "#fecaca", backgroundColor: "#fff" },
+  errText: { color: ERROR, marginTop: 6 },
+
+  alert: {
+    backgroundColor: "#fee2e2",
+    borderColor: "#fecaca",
+    borderWidth: 1,
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 16,
+  },
+  alertText: { color: ERROR },
+
+  primaryBtn: {
+    marginTop: 18,
+    backgroundColor: ACCENT,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  primaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+
+  linkBtn: { marginTop: 12, alignItems: "center" },
+  linkText: { color: ACCENT, fontWeight: "700" },
+
+  secondaryBtn: {
+    marginTop: 12,
+    borderColor: BORDER,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  secondaryText: { color: TEXT, fontWeight: "700" },
+});
