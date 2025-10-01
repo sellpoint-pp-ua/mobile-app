@@ -3,7 +3,15 @@ import { getToken, setToken, deleteToken } from "@/src/auth/token";
 const API = "https://api.sellpoint.pp.ua/api";
 
 export type LoginRequest = { login: string; password: string };
-export type RegisterRequest = { fullName: string; email: string; password: string };
+
+export type RegisterRequest = {
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  email: string;
+  password: string;
+};
+
 type AuthResponse = { token?: string } | string;
 
 type VerifyResult = { success: true; alreadyVerified?: boolean };
@@ -50,8 +58,23 @@ function extractToken(resp: AuthResponse): string {
 }
 
 export async function apiRegister(body: RegisterRequest): Promise<string> {
+  // Нормализация имени
+  let first = (body.firstName ?? "").trim();
+  let last = (body.lastName ?? "").trim();
+
+  if ((!first || !last) && body.fullName) {
+    const parts = body.fullName.trim().split(/\s+/);
+    first = first || (parts[0] ?? "");
+    last = last || (parts.slice(1).join(" ") || "");
+  }
+
+  if (!first || !last) {
+    throw new Error("Вкажіть ім'я та прізвище окремо.");
+  }
+
   const form = new FormData();
-  form.append("FullName", body.fullName);
+  form.append("FirstName", first);
+  form.append("LastName", last);
   form.append("Email", body.email);
   form.append("Password", body.password);
 

@@ -3,9 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   FlatList,
   Pressable,
+  RefreshControl,
+  SafeAreaView,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
@@ -16,249 +18,241 @@ const BG = "#ffffff";
 const TEXT = "#111111";
 const SUBTEXT = "#6b7280";
 const BORDER = "#e5e7eb";
-const ACCENT = "#4563d1";
-const CARD = "#ffffff";
-
-function withTimeout<T>(p: Promise<T>, ms = 8000) {
-  return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error("Запит перевищив час очікування")), ms);
-    p.then(
-      (v) => { clearTimeout(t); resolve(v); },
-      (e) => { clearTimeout(t); reject(e); },
-    );
-  });
-}
+const ACCENT = "#5a63d1";
+const ROW_BG = "#f3f4f6";
 
 type CategoryDto = { id?: string; name?: string | null; parentId?: string | null };
 
-async function fetchCategories(): Promise<{ list: CategoryDto[]; usedUrl: string; status: number }> {
-  const candidates = [
-    "/api/Category",
-    "/api/Category/GetAll",
-    "/api/Category/get-all",
-    "/api/Category/get",
-  ];
+const SECTIONS = [
+  { id: "for-you", title: "Для тебе", icon: "gift" as const, re: /(топ|попул|новин|для тебе)/i },
+  { id: "energy", title: "Пристрої для енергонезалежності", icon: "battery-3" as const, re: /(генератор|інвертор|акум|аккум|заряд|power|соняч)/i },
+  { id: "fashion", title: "Одяг та взуття", icon: "shopping-bag" as const, re: /(одяг|одеж|майк|футболк|куртк|штани|крос|кеди|взут)/i },
+  { id: "tech", title: "Техніка та електроніка", icon: "bolt" as const, re: /(технік|ноут|пк|комп|смартф|телефон|планшет|електрон|тв|монітор)/i },
+  {
+    id: "kids",
+    title: "Товари для дітей",
+    icon: "child" as const,
+    re: /\b(дит|дитяч|дитина|іграш|toy|коляс|пелюш|дитячі|baby|kids)\b/i, // строгое совпадение
+  },
+];
 
-  let lastErr: any = null;
-  for (const path of candidates) {
-    const url = `${OpenAPI.baseUrl}${path}`;
+async function fetchCategories(): Promise<CategoryDto[]> {
+  const urls = ["/api/Category", "/api/Category/GetAll", "/api/Category/get-all", "/api/Category/get"];
+  for (const path of urls) {
     try {
-      const res = await withTimeout(fetch(url, { headers: { Accept: "application/json" } }));
-      const status = res.status;
-      if (!res.ok) throw new Error(`HTTP ${status}`);
+      const res = await fetch(`${OpenAPI.baseUrl}${path}`, { headers: { Accept: "application/json" } });
+      if (!res.ok) continue;
       const json = await res.json();
-      const list: CategoryDto[] = Array.isArray(json) ? json : (json?.items ?? json?.data ?? []);
-      if (Array.isArray(list)) return { list, usedUrl: url, status };
-      throw new Error("Невідомий формат відповіді");
-    } catch (e) {
-      lastErr = { e, path };
-    }
+      const arr: CategoryDto[] = Array.isArray(json) ? json : json?.items ?? json?.data ?? [];
+      if (Array.isArray(arr)) return arr;
+    } catch {}
   }
-  throw new Error(
-    `Не вдалося отримати категорії (усі варіанти повернули помилку). Остання: ${lastErr?.e?.message ?? lastErr}`
-  );
+  return [];
 }
 
-const FORCE_FIX: Record<string, string> = {
-  "Дім i сад": "Дім і сад",
-  "Авто-, мото": "Авто та мото",
-  "Комплектуючі для окулярів": "Комплектуючі для комп'ютера",
-  "Комплектующие для очков": "Комплектуючі для комп'ютера",
-};
-
-function replaceLatinI(s: string) {
-  return s.replace(/([А-Яа-яЇїІіЄєҐґ])[iI]([А-Яа-яЇїІіЄєҐґ])/g, (_, a, b) => `${a}і${b}`);
+function prettifyName(name?: string | null): string {
+  return (name || "").trim().replace(/\s+/g, " ");
 }
 
-function prettifyName(name: string): string {
-  let s = (name || "").trim().replace(/\s+/g, " ");
-  s = replaceLatinI(s);
-  s = s.replace(/авто-?,?\s*мото/gi, "Авто та мото");
-  if (FORCE_FIX[name]) return FORCE_FIX[name];
-  return s;
+function normalize(list: CategoryDto[]) {
+  return list
+    .map((c) => ({ ...c, name: prettifyName(c.name) }))
+    .filter((c) => c.name && c.name.length > 1);
 }
 
-function curateTop10(list: CategoryDto[]): CategoryDto[] {
-  const buckets = [
-    /(смартф|телефон|phone|iphone|android)/i,
-    /(ноут|laptop|macbook|комп|пк|computer)/i,
-    /(аксес|науш|headphone|гарнітур|accessor)/i,
-    /(одяг|одеж|fashion|взут|обув|clothes)/i,
-    /(краса|beauty|космет|make)/i,
-    /(дім|дом|home|інтер|кух|посуда|house)/i,
-    /(спорт|sport|fitness|вел)/i,
-    /(дит|дет|kids|toys|іграш)/i,
-    /(побут|бытов|applian|технік)/i,
-    /(авто|auto|car|шини|шины|запчаст)/i,
-  ];
-
-  const norm = (c?: CategoryDto) => replaceLatinI((c?.name || "").toLowerCase());
-  const used = new Set<string>();
-  const keyOf = (c: CategoryDto) => c.id || norm(c);
-
-  const pickFor = (re: RegExp) => list.find((c) => !used.has(keyOf(c)) && re.test(norm(c))) || null;
-
-  const curated: CategoryDto[] = [];
-  for (const re of buckets) {
-    const hit = pickFor(re);
-    if (hit) {
-      used.add(keyOf(hit));
-      curated.push(hit);
-    }
-    if (curated.length >= 10) break;
+function bucketize(list: CategoryDto[]) {
+  const map = new Map<string, CategoryDto[]>();
+  for (const s of SECTIONS) map.set(s.id, []);
+  const otherKey = "for-you";
+  for (const c of list) {
+    const low = (c.name || "").toLowerCase();
+    const hit = SECTIONS.find((s) => s.re.test(low));
+    map.get(hit ? hit.id : otherKey)!.push(c);
   }
-
-  if (curated.length < 10) {
-    const rest = list
-      .filter((c) => !used.has(keyOf(c)))
-      .sort((a, b) => prettifyName(a.name || "").localeCompare(prettifyName(b.name || ""), "uk"));
-    curated.push(...rest.slice(0, 10 - curated.length));
+  for (const s of SECTIONS) {
+    map.set(
+      s.id,
+      (map.get(s.id) || []).sort((a, b) =>
+        prettifyName(a.name).localeCompare(prettifyName(b.name), "uk")
+      )
+    );
   }
-
-  return curated.slice(0, 10);
-}
-
-function pickIconByName(name: string): React.ComponentProps<typeof FontAwesome>["name"] {
-  const n = replaceLatinI(name.toLowerCase());
-  if (/(смартф|телефон|phone|iphone|android)/.test(n)) return "mobile";
-  if (/(ноут|laptop|macbook|комп|пк|computer)/.test(n)) return "laptop";
-  if (/(аксес|науш|headphone|гарнітур|accessor)/.test(n)) return "headphones";
-  if (/(одяг|одеж|fashion|взут|обув|clothes)/.test(n)) return "shopping-bag";
-  if (/(краса|beauty|космет|make)/.test(n)) return "heart-o";
-  if (/(дім|дом|home|інтер|кух|посуда|house)/.test(n)) return "home";
-  if (/(спорт|sport|fitness|вел)/.test(n)) return "bicycle";
-  if (/(дит|дет|kids|toys|іграш)/.test(n)) return "child";
-  if (/(побут|бытов|applian|технік)/.test(n)) return "bolt";
-  if (/(авто|auto|car|шини|шины|запчаст)/.test(n)) return "car";
-  return "folder";
+  return map;
 }
 
 export default function CatalogScreen() {
   const r = useRouter();
   const [cats, setCats] = React.useState<CategoryDto[]>([]);
+  const [bySection, setBySection] = React.useState<Map<string, CategoryDto[]>>(new Map());
+  const [selected, setSelected] = React.useState(SECTIONS[0].id);
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string>("");
-  const [debugUrl, setDebugUrl] = React.useState<string>("");
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [error, setError] = React.useState("");
 
-  React.useEffect(() => {
-    let alive = true;
-    (async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const { list, usedUrl } = await fetchCategories();
-        if (!alive) return;
-        setDebugUrl(usedUrl);
-        setCats(curateTop10(list ?? []));
-      } catch (e: any) {
-        if (!alive) return;
-        setError(e?.message || "Помилка завантаження");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const list = await fetchCategories();
+      const norm = normalize(list);
+      setCats(norm);
+      setBySection(bucketize(norm));
+    } catch (e: any) {
+      setError(e?.message || "Помилка завантаження");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
-  const goSearchByCat = (name?: string | null) => () => {
-    const q = prettifyName(name || "").trim();
-    r.push(`/search?query=${encodeURIComponent(q)}` as any);
-  };
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const goSearch = (q: string) => r.push(`/search?query=${encodeURIComponent(q)}` as any);
+  const rightData = bySection.get(selected) || [];
 
   if (loading) {
     return (
-      <View style={[S.screen, S.center]}>
-        <ActivityIndicator />
-        <Text style={{ color: SUBTEXT, marginTop: 8 }}>Завантаження категорій…</Text>
-      </View>
+      <SafeAreaView style={S.screen}>
+        <View style={{ flexDirection: "row", flex: 1 }}>
+          <View style={S.leftRail}>
+            {SECTIONS.map((s, i) => (
+              <View key={s.id} style={[S.leftItem, i === 0 && S.leftItemActive]}>
+                <View style={[S.leftIconWrap, { backgroundColor: ACCENT }]}>
+                  <FontAwesome name={s.icon} size={22} color="#fff" />
+                </View>
+                <Text style={[S.leftTitleActive]} numberOfLines={2}>{s.title}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={S.rightPane}>
+            {Array.from({ length: 12 }).map((_, i) => <View key={i} style={S.rowSkeleton} />)}
+          </View>
+        </View>
+        <TabBar active="catalog" />
+      </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <View style={[S.screen, S.center]}>
-        <Text style={{ color: "#dc2626", textAlign: "center", marginHorizontal: 16 }}>{error}</Text>
-        {debugUrl ? <Text style={{ color: SUBTEXT, marginTop: 8, fontSize: 12 }}>URL: {debugUrl}</Text> : null}
-      </View>
+      <SafeAreaView style={[S.screen, S.center]}>
+        <Text style={S.error}>{error}</Text>
+        <Pressable onPress={load} style={S.retryBtn}>
+          <Text style={S.retryText}>Спробувати знову</Text>
+        </Pressable>
+        <TabBar active="catalog" />
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={S.screen}>
-      <Text style={S.title}>Каталог</Text>
-
-      {cats.length === 0 ? (
-        <View style={[S.center, { flex: 1 }]}>
-          <Text style={{ color: SUBTEXT }}>Категорій немає</Text>
+    <SafeAreaView style={S.screen}>
+      <View style={{ flexDirection: "row", flex: 1 }}>
+        <View style={S.leftRail}>
+          <FlatList
+            data={SECTIONS}
+            keyExtractor={(s) => s.id}
+            renderItem={({ item }) => {
+              const active = item.id === selected;
+              return (
+                <Pressable
+                  onPress={() => setSelected(item.id)}
+                  style={[S.leftItem, active && S.leftItemActive]}
+                >
+                  <View style={[S.leftIconWrap]}>
+                    <FontAwesome name={item.icon} size={22} color={active ? ACCENT : "#111"} />
+                  </View>
+                  <Text style={[active ? S.leftTitleActive : S.leftTitle]} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
         </View>
-      ) : (
+
         <FlatList
-          data={cats}
+          style={S.rightPane}
+          data={rightData.length ? rightData : cats}
           keyExtractor={(it, i) => it.id ?? String(i)}
-          numColumns={2}
-          columnWrapperStyle={{ gap: 12 }}
-          contentContainerStyle={{ paddingBottom: 96, paddingTop: 6, gap: 12 }}
-          renderItem={({ item }) => <CategoryCard item={item} onPress={goSearchByCat(item.name)} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
+          }
+          renderItem={({ item }) => (
+            <Pressable onPress={() => goSearch(prettifyName(item.name))} style={S.row}>
+              <Text numberOfLines={1} style={S.rowText}>{prettifyName(item.name)}</Text>
+            </Pressable>
+          )}
+          ListEmptyComponent={<View style={[S.center, { paddingTop: 40 }]}><Text style={{ color: SUBTEXT }}>Категорій немає</Text></View>}
+          contentContainerStyle={{ paddingBottom: 92 }}
         />
-      )}
-
+      </View>
       <TabBar active="catalog" />
-    </View>
+    </SafeAreaView>
   );
 }
 
-function CategoryCard({ item, onPress }: { item: CategoryDto; onPress: () => void }) {
-  const name = prettifyName(item.name || "—");
-  const icon = pickIconByName(name);
-
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [S.card, pressed && { opacity: 0.92 }]}>
-      <View style={S.iconBadge}>
-        <FontAwesome name={icon} size={16} color="#fff" />
-      </View>
-      <Text numberOfLines={2} style={S.cardTitle}>{name}</Text>
-      <View style={S.cardFooter}>
-        <Text style={S.link}>Переглянути</Text>
-        <FontAwesome name="angle-right" size={16} color={ACCENT} />
-      </View>
-    </Pressable>
-  );
-}
+const LEFT_W = 116;
 
 const S = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG, paddingHorizontal: 12, paddingTop: 12 },
+  screen: { flex: 1, backgroundColor: BG },
   center: { alignItems: "center", justifyContent: "center" },
 
-  title: { color: TEXT, fontWeight: "800", fontSize: 20, marginBottom: 8 },
-
-  card: {
-    flex: 1,
-    minHeight: 110,
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 14,
-    padding: 12,
-    justifyContent: "space-between",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+  leftRail: {
+    width: LEFT_W,
+    backgroundColor: "#fff",
+    borderRightWidth: 1,
+    borderRightColor: BORDER,
+    paddingVertical: 8,
   },
-  iconBadge: {
-    width: 28, height: 28, borderRadius: 999,
+  leftItem: {
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    gap: 8,
+  },
+  leftItemActive: {
     backgroundColor: ACCENT,
-    alignItems: "center", justifyContent: "center",
-    marginBottom: 8,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
   },
-  cardTitle: {
-    color: TEXT,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: "700",
-    includeFontPadding: false,
+  leftIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
   },
-  cardFooter: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
-  link: { color: ACCENT, fontWeight: "700" },
+  leftTitle: { color: TEXT, textAlign: "center", fontSize: 12 },
+  leftTitleActive: { color: "#fff", textAlign: "center", fontSize: 12, fontWeight: "700" },
+
+  rightPane: { flex: 1, backgroundColor: ROW_BG },
+  row: {
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e9eaee",
+    backgroundColor: ROW_BG,
+  },
+  rowText: { color: TEXT, fontSize: 18, fontWeight: "600" },
+
+  error: { color: "#dc2626", textAlign: "center", paddingHorizontal: 16 },
+  retryBtn: {
+    marginTop: 12,
+    backgroundColor: ACCENT,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryText: { color: "#fff", fontWeight: "800" },
+
+  rowSkeleton: {
+    height: 54,
+    backgroundColor: "#edeef3",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e9eaee",
+  },
 });

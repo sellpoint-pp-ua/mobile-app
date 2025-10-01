@@ -1,12 +1,5 @@
 import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  Alert,
-} from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import TabBar from "@/src/ui/TabBar";
@@ -18,6 +11,7 @@ const TEXT = "#111111";
 const SUBTEXT = "#6b7280";
 const BORDER = "#e5e7eb";
 const ACCENT = "#3d36feff";
+const GREEN = "#10b981";
 
 export default function ProfileScreen() {
   const r = useRouter();
@@ -45,9 +39,7 @@ export default function ProfileScreen() {
               <FontAwesome name="user-o" size={26} color="#fff" />
             </View>
             <Text style={S.authTitle}>Увійдіть або зареєструйтесь</Text>
-            <Text style={S.authSub}>
-              Щоб керувати замовленнями, обраним та знижками
-            </Text>
+            <Text style={S.authSub}>Щоб керувати замовленнями, обраним та знижками</Text>
 
             <Pressable
               onPress={() => r.push("/sign-in" as any)}
@@ -78,9 +70,14 @@ export default function ProfileScreen() {
             <Text style={S.avatarText}>
               {initials(me?.fullName || me?.username || "")}
             </Text>
+            {me?.emailConfirmed ? (
+              <View style={S.verifiedBadge}>
+                <FontAwesome name="check" size={10} color="#fff" />
+              </View>
+            ) : null}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={S.name}>{me?.fullName || "Користувач"}</Text>
+            <Text style={S.name}>{me?.fullName || "Stepan Bandera"}</Text>
             {!!me?.username && <Text style={S.username}>@{me.username}</Text>}
             {!!me?.email && <Text style={S.username}>{me.email}</Text>}
           </View>
@@ -92,9 +89,7 @@ export default function ProfileScreen() {
             style={({ pressed }) => [S.banner, pressed && { opacity: 0.95 }]}
           >
             <FontAwesome name="envelope" size={14} color={ACCENT} />
-            <Text style={S.bannerText}>
-              Підтвердьте e-mail, щоб оформляти замовлення
-            </Text>
+            <Text style={S.bannerText}>Підтвердьте e-mail, щоб оформляти замовлення</Text>
             <FontAwesome
               name="angle-right"
               size={16}
@@ -105,47 +100,15 @@ export default function ProfileScreen() {
         ) : null}
 
         <View style={S.list}>
-          <Row
-            icon="shopping-bag"
-            label="Мої замовлення"
-            onPress={() => Alert.alert("Мої замовлення", "Розділ у розробці")}
-          />
-          <Row
-            icon="truck"
-            label="Відстеження замовлення"
-            onPress={() => Alert.alert("Відстеження", "Розділ у розробці")}
-          />
+          <Row icon="shopping-bag" label="Мої замовлення" onPress={() => Alert.alert("Мої замовлення", "Розділ у розробці")} />
+          <Row icon="truck" label="Відстеження замовлення" onPress={() => Alert.alert("Відстеження", "Розділ у розробці")} />
           <Row icon="heart-o" label="Обране" onPress={() => r.push("/favorites" as any)} />
-          <Row
-            icon="comment-o"
-            label="Відгуки"
-            onPress={() => Alert.alert("Відгуки", "Розділ у розробці")}
-          />
-          <Row
-            icon="credit-card"
-            label="Мій гаманець"
-            onPress={() => Alert.alert("Гаманець", "Розділ у розробці")}
-          />
-          <Row
-            icon="gift"
-            label="Знижки та бонуси"
-            onPress={() => Alert.alert("Знижки та бонуси", "Розділ у розробці")}
-          />
-          <Row
-            icon="shopping-basket"
-            label="Створити магазин на SellPoint"
-            onPress={() => r.push("/entities/create" as any)}
-          />
-          <Row
-            icon="cog"
-            label="Налаштування"
-            onPress={() => Alert.alert("Налаштування", "Розділ у розробці")}
-          />
-          <Row
-            icon="headphones"
-            label="Sell Point-підтримка"
-            onPress={() => Alert.alert("Підтримка", "support@sellpoint.pp.ua")}
-          />
+          <Row icon="comment-o" label="Відгуки" onPress={() => Alert.alert("Відгуки", "Розділ у розробці")} />
+          <Row icon="credit-card" label="Мій гаманець" onPress={() => Alert.alert("Гаманець", "Розділ у розробці")} />
+          <Row icon="gift" label="Знижки та бонуси" onPress={() => Alert.alert("Знижки та бонуси", "Розділ у розробці")} />
+          <Row icon="shopping-basket" label="Створити магазин на SellPoint" onPress={() => r.push("/entities/create" as any)} />
+          <Row icon="cog" label="Налаштування" onPress={() => Alert.alert("Налаштування", "Розділ у розробці")} />
+          <Row icon="headphones" label="Sell Point-підтримка" onPress={() => Alert.alert("Підтримка", "support@sellpoint.pp.ua")} />
         </View>
 
         <Pressable
@@ -243,16 +206,30 @@ const S = StyleSheet.create({
     marginBottom: 12,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     backgroundColor: "#eef2ff",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: BORDER,
+    position: "relative",
   },
   avatarText: { color: ACCENT, fontWeight: "800", fontSize: 18 },
+  verifiedBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: GREEN,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: CARD,
+  },
   name: { color: TEXT, fontSize: 18, fontWeight: "800" },
   username: { color: SUBTEXT, marginTop: 2 },
   banner: {
