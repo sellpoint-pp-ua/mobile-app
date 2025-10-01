@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { apiSendVerificationCode, apiVerifyEmailCode } from "@/src/auth/authService.mobile";
+import { apiSendVerificationCode, apiVerifyEmailCode, apiGetMe } from "@/src/auth/authService.mobile";
 
 const BG = "#ffffff";
 const TEXT = "#111111";
@@ -31,6 +31,16 @@ export default function VerifyEmailScreen() {
   const [err, setErr] = React.useState<string>("");
   const [ok, setOk] = React.useState<string>("");
   const [cooldown, setCooldown] = React.useState(0);
+  const [userEmail, setUserEmail] = React.useState<string>("");
+
+  React.useEffect(() => {
+    // Загружаем e-mail текущего пользователя
+    apiGetMe()
+      .then((me) => {
+        if (me?.email) setUserEmail(me.email);
+      })
+      .catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     if (cooldown <= 0) return;
@@ -92,15 +102,15 @@ export default function VerifyEmailScreen() {
       behavior={Platform.select({ ios: "padding", android: undefined })}
     >
       <ScrollView contentContainerStyle={S.container} keyboardShouldPersistTaps="handled">
-        <View style={{ alignItems: "center", marginBottom: 8 }}>
-          <Text style={S.title}>Підтвердьте e-mail</Text>
-          <Text style={S.subtitle}>
-            Ми надіслали код підтвердження на вашу пошту. Введіть код нижче.
-          </Text>
-        </View>
+        {/* Логотип */}
+        <Text style={S.logo}>sell <Text style={{ color: ACCENT }}>point.</Text></Text>
+
+        <Text style={S.subtitle}>
+          Введіть код, який ми відправили на пошту{" "}
+          <Text style={{ color: ACCENT }}>{userEmail || "вашу пошту"}</Text>, щоб підтвердити свою особу
+        </Text>
 
         <View style={S.field}>
-          <Text style={S.label}>Код з листа</Text>
           <TextInput
             value={code}
             onChangeText={(t) => {
@@ -108,7 +118,7 @@ export default function VerifyEmailScreen() {
               if (err) setErr("");
               if (ok) setOk("");
             }}
-            placeholder="Напр., 1A2B"
+            placeholder="Введіть код"
             placeholderTextColor={MUTED}
             style={S.input}
             autoCapitalize="none"
@@ -158,13 +168,9 @@ export default function VerifyEmailScreen() {
             <ActivityIndicator />
           ) : (
             <Text style={S.linkText}>
-              {cooldown > 0 ? `Надіслати код ще раз (${cooldown} с)` : "Надіслати код ще раз"}
+              {cooldown > 0 ? `Надіслати код ще раз (${cooldown} с)` : "Надіслати повторно код"}
             </Text>
           )}
-        </Pressable>
-
-        <Pressable onPress={() => router.back()} style={({ pressed }) => [S.secondaryBtn, pressed && { opacity: 0.9 }]}>
-          <Text style={S.secondaryText}>Назад</Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -173,24 +179,34 @@ export default function VerifyEmailScreen() {
 
 const S = StyleSheet.create({
   container: {
-    padding: 16,
-    paddingTop: 20,
-    paddingBottom: 32,
+    padding: 24,
+    paddingTop: 40,
     backgroundColor: BG,
     flexGrow: 1,
   },
-  title: { color: TEXT, fontSize: 24, fontWeight: "800", textAlign: "center" },
-  subtitle: { color: MUTED, marginTop: 6, textAlign: "center" },
-  field: { marginTop: 16 },
-  label: { color: TEXT, marginBottom: 6, fontWeight: "600" },
+  logo: {
+    fontSize: 42,
+    fontWeight: "800",
+    textAlign: "center",
+    color: TEXT,
+    marginBottom: 16,
+  },
+  subtitle: {
+    color: TEXT,
+    textAlign: "center",
+    fontSize: 16,
+    marginBottom: 28,
+  },
+  field: { marginBottom: 16 },
   input: {
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: BORDER,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.select({ ios: 12, android: 10, default: 12 }),
+    paddingHorizontal: 14,
+    paddingVertical: Platform.select({ ios: 12, android: 10 }),
     backgroundColor: "#fff",
     color: TEXT,
+    fontSize: 16,
     letterSpacing: 2,
   },
   alert: { borderWidth: 1, padding: 10, borderRadius: 10, marginTop: 14 },
@@ -199,22 +215,13 @@ const S = StyleSheet.create({
   alertOk: { backgroundColor: "#dcfce7", borderColor: "#bbf7d0" },
   alertTextOk: { color: OK },
   primaryBtn: {
-    marginTop: 18,
+    marginTop: 8,
     backgroundColor: ACCENT,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
   },
   primaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  linkBtn: { marginTop: 10, alignItems: "center" },
-  linkText: { color: ACCENT, fontWeight: "700" },
-  secondaryBtn: {
-    marginTop: 12,
-    borderColor: BORDER,
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  secondaryText: { color: TEXT, fontWeight: "700" },
+  linkBtn: { marginTop: 18, alignItems: "center" },
+  linkText: { color: ACCENT, fontWeight: "600" },
 });

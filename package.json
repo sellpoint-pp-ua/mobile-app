@@ -9,7 +9,7 @@
     "@react-navigation/native": "^7.1.6",
     "@tanstack/react-query": "^5.85.5",
     "axios": "^1.11.0",
-    "expo": "54.0.8",
+    "expo": "^54.0.8",
     "expo-constants": "~18.0.9",
     "expo-device": "~8.0.8",
     "expo-font": "14.0.8",

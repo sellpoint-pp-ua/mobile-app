@@ -37,9 +37,9 @@ export default function RootLayout() {
         <Stack.Screen name="(main)/profile" />
         <Stack.Screen name="(main)/search" />
         <Stack.Screen name="product/id" />
-        <Stack.Screen name="(auth)/sign-in" />
-        <Stack.Screen name="(auth)/sign-up" />
-        <Stack.Screen name="(auth)/verify-email" />
+        <Stack.Screen name="(auth)/sign-in" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/sign-up" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/verify-email" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>
   );

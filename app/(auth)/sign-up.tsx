@@ -9,43 +9,47 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { apiRegister, apiSendVerificationCode } from "@/src/auth/authService.mobile";
-import { setToken } from "@/src/auth/token";
+import { Stack, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { apiRegister } from "@/src/auth/authService.mobile";
+import { useAuth } from "@/src/auth/AuthProvider";
 
 const BG = "#ffffff";
 const TEXT = "#111111";
 const MUTED = "#6b7280";
-const ACCENT = "#4563d1";
+const ACCENT = "#5a63d1";
 const BORDER = "#e5e7eb";
 const ERROR = "#dc2626";
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const auth = useAuth() as any;
+  const reload = auth?.reload;
+  const setTokenAndReload = auth?.setTokenAndReload;
 
+  const [lastName, setLastName] = React.useState("");
   const [firstName, setFirstName] = React.useState("");
-  const [lastName, setLastName]   = React.useState("");
-  const [email, setEmail]         = React.useState("");
-  const [password, setPassword]   = React.useState("");
-  const [confirm, setConfirm]     = React.useState("");
-  const [agree, setAgree]         = React.useState(false);
-
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [showPass, setShowPass] = React.useState(false);
+  const [showPassConfirm, setShowPassConfirm] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string>("");
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [agree, setAgree] = React.useState(false);
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!firstName.trim()) e.firstName = "Вкажіть імʼя";
-    if (!lastName.trim())  e.lastName  = "Вкажіть прізвище";
-    if (!email.trim())     e.email     = "Вкажіть e-mail";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = "Некоректний e-mail";
-    if (!password)         e.password  = "Вкажіть пароль";
-    else if (password.length < 8) e.password = "Мінімум 8 символів";
-    if (!confirm)          e.confirm   = "Повторіть пароль";
-    else if (confirm !== password) e.confirm = "Паролі не співпадають";
-    if (!agree)            e.agree     = "Необхідно погодитися з умовами";
+    if (!lastName.trim()) e.lastName = "Введіть прізвище";
+    if (!firstName.trim()) e.firstName = "Введіть ім’я";
+    if (!email.trim()) e.email = "Введіть e-mail";
+    if (!password) e.password = "Введіть пароль";
+    if (password && password.length < 6) e.password = "Пароль має бути мінімум 6 символів";
+    if (password !== confirmPassword) e.confirmPassword = "Паролі не співпадають";
+    if (!agree) e.agree = "Потрібно прийняти політику конфіденційності";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -53,38 +57,33 @@ export default function SignUpScreen() {
   async function onSubmit() {
     setErr("");
     if (!validate()) return;
-
     setLoading(true);
     try {
-      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
-
-      const regResult = await apiRegister({
-        fullName,
-        email: email.trim(),
-        password,
-      });
-
-      const token = typeof regResult === "string" ? regResult : (regResult as any)?.token;
-      if (token) {
-        await setToken(token);
-      } else {
-        throw new Error("Токен не отримано після реєстрації");
+      const fullName = `${lastName.trim()} ${firstName.trim()}`;
+      await apiRegister({ fullName, email: email.trim(), password });
+      if (typeof setTokenAndReload === "function") {
+        await setTokenAndReload();
+      } else if (typeof reload === "function") {
+        await reload();
       }
-
-      try {
-        await apiSendVerificationCode("uk");
-      } catch {}
-
       router.replace("/verify-email" as any);
     } catch (e: any) {
       const m =
         typeof e?.message === "string" && e.message.trim().length > 0
           ? e.message
-          : "Не вдалося зареєструватися.";
+          : "Не вдалося зареєструватися. Спробуйте ще раз.";
       setErr(m);
     } finally {
       setLoading(false);
     }
+  }
+
+  function onApple() {
+    Alert.alert("Незабаром", "Реєстрація через Apple у розробці.");
+  }
+
+  function onGoogle() {
+    Alert.alert("Незабаром", "Реєстрація через Google у розробці.");
   }
 
   return (
@@ -92,31 +91,23 @@ export default function SignUpScreen() {
       style={{ flex: 1, backgroundColor: BG }}
       behavior={Platform.select({ ios: "padding", android: undefined })}
     >
+      <Stack.Screen options={{ headerShown: false }} />
+
       <ScrollView contentContainerStyle={S.container} keyboardShouldPersistTaps="handled">
-        <View style={{ alignItems: "center", marginBottom: 8 }}>
-          <Text style={S.subtitle}>Створіть новий акаунт</Text>
+        <View style={S.topBar}>
+          <Pressable onPress={() => router.replace("/home")} style={S.backBtn} hitSlop={8}>
+            <Ionicons name="arrow-back" size={26} color={TEXT} />
+          </Pressable>
         </View>
 
-        <View style={S.row2}>
-          <View style={{ flex: 1 }}>
-            <Text style={S.label}>Імʼя</Text>
-            <TextInput
-              value={firstName}
-              onChangeText={(t) => {
-                setFirstName(t);
-                if (errors.firstName) setErrors((p) => ({ ...p, firstName: "" }));
-                if (err) setErr("");
-              }}
-              placeholder="Ваше імʼя"
-              placeholderTextColor={MUTED}
-              style={[S.input, errors.firstName && S.inputError]}
-              autoCapitalize="words"
-            />
-            {errors.firstName ? <Text style={S.errText}>{errors.firstName}</Text> : null}
-          </View>
-          <View style={{ width: 12 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={S.label}>Прізвище</Text>
+        <Text style={S.logo}>
+          sell <Text style={{ color: ACCENT }}>point.</Text>
+        </Text>
+        <Text style={S.subtitle}>Створіть новий акаунт, щоб розпочати покупки</Text>
+
+        <View style={S.card}>
+          <View style={S.inputRow}>
+            <Ionicons name="person-outline" size={18} color={MUTED} style={S.leftIcon} />
             <TextInput
               value={lastName}
               onChangeText={(t) => {
@@ -124,116 +115,151 @@ export default function SignUpScreen() {
                 if (errors.lastName) setErrors((p) => ({ ...p, lastName: "" }));
                 if (err) setErr("");
               }}
-              placeholder="Ваше прізвище"
+              placeholder="Прізвище"
               placeholderTextColor={MUTED}
               style={[S.input, errors.lastName && S.inputError]}
-              autoCapitalize="words"
             />
-            {errors.lastName ? <Text style={S.errText}>{errors.lastName}</Text> : null}
           </View>
-        </View>
+          {errors.lastName ? <Text style={S.errText}>{errors.lastName}</Text> : null}
 
-        <View style={S.field}>
-          <Text style={S.label}>E-mail</Text>
-          <TextInput
-            value={email}
-            onChangeText={(t) => {
-              setEmail(t);
-              if (errors.email) setErrors((p) => ({ ...p, email: "" }));
-              if (err) setErr("");
-            }}
-            placeholder="name@example.com"
-            placeholderTextColor={MUTED}
-            style={[S.input, errors.email && S.inputError]}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-          />
+          <View style={S.inputRow}>
+            <Ionicons name="person-outline" size={18} color={MUTED} style={S.leftIcon} />
+            <TextInput
+              value={firstName}
+              onChangeText={(t) => {
+                setFirstName(t);
+                if (errors.firstName) setErrors((p) => ({ ...p, firstName: "" }));
+                if (err) setErr("");
+              }}
+              placeholder="Ім’я"
+              placeholderTextColor={MUTED}
+              style={[S.input, errors.firstName && S.inputError]}
+            />
+          </View>
+          {errors.firstName ? <Text style={S.errText}>{errors.firstName}</Text> : null}
+
+          <View style={S.inputRow}>
+            <Ionicons name="mail-outline" size={18} color={MUTED} style={S.leftIcon} />
+            <TextInput
+              value={email}
+              onChangeText={(t) => {
+                setEmail(t);
+                if (errors.email) setErrors((p) => ({ ...p, email: "" }));
+                if (err) setErr("");
+              }}
+              placeholder="Ел.пошта"
+              placeholderTextColor={MUTED}
+              style={[S.input, errors.email && S.inputError]}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </View>
           {errors.email ? <Text style={S.errText}>{errors.email}</Text> : null}
-        </View>
 
-        <View style={S.field}>
-          <Text style={S.label}>Пароль</Text>
-          <TextInput
-            value={password}
-            onChangeText={(t) => {
-              setPassword(t);
-              if (errors.password) setErrors((p) => ({ ...p, password: "" }));
-              if (err) setErr("");
-            }}
-            placeholder="Мінімум 8 символів"
-            placeholderTextColor={MUTED}
-            style={[S.input, errors.password && S.inputError]}
-            secureTextEntry
-          />
-          {errors.password ? <Text style={S.errText}>{errors.password}</Text> : null}
-        </View>
-
-        <View style={S.field}>
-          <Text style={S.label}>Повторіть пароль</Text>
-          <TextInput
-            value={confirm}
-            onChangeText={(t) => {
-              setConfirm(t);
-              if (errors.confirm) setErrors((p) => ({ ...p, confirm: "" }));
-              if (err) setErr("");
-            }}
-            placeholder="Повторіть пароль"
-            placeholderTextColor={MUTED}
-            style={[S.input, errors.confirm && S.inputError]}
-            secureTextEntry
-          />
-          {errors.confirm ? <Text style={S.errText}>{errors.confirm}</Text> : null}
-        </View>
-
-        <Pressable
-          onPress={() => {
-            setAgree((v) => !v);
-            if (errors.agree) setErrors((p) => ({ ...p, agree: "" }));
-          }}
-          style={({ pressed }) => [S.checkboxRow, pressed && { opacity: 0.9 }]}
-        >
-          <View style={[S.checkbox, agree && S.checkboxOn]} />
-          <Text style={S.checkboxLabel}>
-            Я погоджуюсь з умовами використання та політикою конфіденційності
-          </Text>
-        </Pressable>
-        {errors.agree ? <Text style={S.errText}>{errors.agree}</Text> : null}
-
-        {err ? (
-          <View style={S.alert}>
-            <Text style={S.alertText}>{err}</Text>
+          <View style={S.inputRow}>
+            <Ionicons name="lock-closed-outline" size={18} color={MUTED} style={S.leftIcon} />
+            <TextInput
+              value={password}
+              onChangeText={(t) => {
+                setPassword(t);
+                if (errors.password) setErrors((p) => ({ ...p, password: "" }));
+                if (err) setErr("");
+              }}
+              placeholder="Пароль"
+              placeholderTextColor={MUTED}
+              style={[S.input, errors.password && S.inputError]}
+              secureTextEntry={!showPass}
+            />
+            <Pressable onPress={() => setShowPass((v) => !v)} style={S.rightIconBtn} hitSlop={8}>
+              <Ionicons name={showPass ? "eye-off-outline" : "eye-outline"} size={20} color={MUTED} />
+            </Pressable>
           </View>
-        ) : null}
+          {errors.password ? <Text style={S.errText}>{errors.password}</Text> : null}
 
-        <Pressable
-          onPress={onSubmit}
-          disabled={loading}
-          style={({ pressed }) => [
-            S.primaryBtn,
-            pressed && { opacity: 0.9 },
-            loading && { opacity: 0.6 },
-          ]}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={S.primaryText}>Створити акаунт</Text>
-          )}
-        </Pressable>
+          <View style={S.inputRow}>
+            <Ionicons name="lock-closed-outline" size={18} color={MUTED} style={S.leftIcon} />
+            <TextInput
+              value={confirmPassword}
+              onChangeText={(t) => {
+                setConfirmPassword(t);
+                if (errors.confirmPassword) setErrors((p) => ({ ...p, confirmPassword: "" }));
+                if (err) setErr("");
+              }}
+              placeholder="Повторити пароль"
+              placeholderTextColor={MUTED}
+              style={[S.input, errors.confirmPassword && S.inputError]}
+              secureTextEntry={!showPassConfirm}
+            />
+            <Pressable
+              onPress={() => setShowPassConfirm((v) => !v)}
+              style={S.rightIconBtn}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={showPassConfirm ? "eye-off-outline" : "eye-outline"}
+                size={20}
+                color={MUTED}
+              />
+            </Pressable>
+          </View>
+          {errors.confirmPassword ? <Text style={S.errText}>{errors.confirmPassword}</Text> : null}
+
+          <Pressable style={S.checkboxWrap} onPress={() => setAgree((p) => !p)}>
+            <View style={[S.checkbox, agree && S.checkboxChecked]}>
+              {agree && <Ionicons name="checkmark" size={16} color="#fff" />}
+            </View>
+            <Text style={S.checkboxText}>
+              Я погоджуюся з <Text style={{ color: ACCENT }}>політикою конфіденційності</Text>
+            </Text>
+          </Pressable>
+          {errors.agree ? <Text style={[S.errText, { marginTop: -8 }]}>{errors.agree}</Text> : null}
+
+          {err ? (
+            <View style={S.alert}>
+              <Ionicons name="warning-outline" size={18} color={ERROR} />
+              <Text style={S.alertText}>{err}</Text>
+            </View>
+          ) : null}
+
+          <Pressable
+            onPress={onSubmit}
+            disabled={loading}
+            style={({ pressed }) => [
+              S.primaryBtn,
+              pressed && { opacity: 0.9 },
+              loading && { opacity: 0.6 },
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={S.primaryText}>Зареєструватися</Text>
+            )}
+          </Pressable>
+
+          <View style={S.dividerRow}>
+            <View style={S.line} />
+            <Text style={S.dividerText}>Або</Text>
+            <View style={S.line} />
+          </View>
+
+          <Pressable onPress={onApple} style={S.appleBtn}>
+            <Ionicons name="logo-apple" size={18} color="#fff" />
+            <Text style={S.appleText}>Продовжити через Apple</Text>
+          </Pressable>
+          <Pressable onPress={onGoogle} style={S.googleBtn}>
+            <Ionicons name="logo-google" size={18} color="#111" />
+            <Text style={S.googleText}>Продовжити через Google</Text>
+          </Pressable>
+        </View>
 
         <Pressable
           onPress={() => router.push("/sign-in" as any)}
           style={({ pressed }) => [S.linkBtn, pressed && { opacity: 0.85 }]}
         >
-          <Text style={S.linkText}>Вже є акаунт? Увійти</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [S.secondaryBtn, pressed && { opacity: 0.9 }]}
-        >
-          <Text style={S.secondaryText}>Назад</Text>
+          <Text style={S.linkText}>
+            Вже маєте профіль? <Text style={{ color: ACCENT, fontWeight: "800" }}>Увійти</Text>
+          </Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -242,43 +268,73 @@ export default function SignUpScreen() {
 
 const S = StyleSheet.create({
   container: {
-    padding: 16,
-    paddingTop: 20,
-    paddingBottom: 32,
+    padding: 20,
+    paddingTop: 10,
     backgroundColor: BG,
     flexGrow: 1,
   },
-  subtitle: { color: MUTED, fontSize: 16, textAlign: "center" },
-
-  row2: { flexDirection: "row", marginTop: 14 },
-  field: { marginTop: 14 },
-  label: { color: TEXT, marginBottom: 6, fontWeight: "600" },
-  input: {
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  backBtn: { padding: 4 },
+  logo: { color: TEXT, fontSize: 40, fontWeight: "800", textAlign: "center", marginBottom: 6 },
+  subtitle: { color: TEXT, marginTop: 4, textAlign: "center", marginBottom: 16, fontSize: 16 },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 2,
     borderColor: BORDER,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.select({ ios: 12, android: 10, default: 12 }),
     backgroundColor: "#fff",
-    color: TEXT,
+    marginTop: 12,
   },
-  inputError: { borderColor: "#fecaca", backgroundColor: "#fff" },
-  errText: { color: ERROR, marginTop: 6 },
-
-  checkboxRow: { flexDirection: "row", alignItems: "center", marginTop: 14 },
+  leftIcon: { marginLeft: 10 },
+  rightIconBtn: { paddingHorizontal: 10, paddingVertical: 8 },
+  input: {
+    flex: 1,
+    paddingVertical: Platform.select({ ios: 12, android: 10 }),
+    paddingHorizontal: 10,
+    color: TEXT,
+    fontSize: 16,
+  },
+  inputError: { borderColor: "#fecaca" },
+  errText: { color: ERROR, marginTop: 6, marginLeft: 2 },
+  checkboxWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+  },
   checkbox: {
     width: 20,
     height: 20,
     borderRadius: 6,
     borderWidth: 2,
     borderColor: BORDER,
-    marginRight: 10,
+    marginRight: 8,
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: "#fff",
   },
-  checkboxOn: { backgroundColor: ACCENT, borderColor: ACCENT },
-  checkboxLabel: { color: TEXT, flex: 1 },
-
+  checkboxChecked: { backgroundColor: ACCENT, borderColor: ACCENT },
+  checkboxText: { color: TEXT, fontSize: 14, flex: 1 },
   alert: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     backgroundColor: "#fee2e2",
     borderColor: "#fecaca",
     borderWidth: 1,
@@ -286,8 +342,7 @@ const S = StyleSheet.create({
     borderRadius: 10,
     marginTop: 16,
   },
-  alertText: { color: ERROR },
-
+  alertText: { color: ERROR, flex: 1 },
   primaryBtn: {
     marginTop: 18,
     backgroundColor: ACCENT,
@@ -296,17 +351,39 @@ const S = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-
-  linkBtn: { marginTop: 12, alignItems: "center" },
-  linkText: { color: ACCENT, fontWeight: "700" },
-
-  secondaryBtn: {
-    marginTop: 12,
-    borderColor: BORDER,
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: 12,
+  dividerRow: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    marginTop: 16,
+    marginBottom: 8,
   },
-  secondaryText: { color: TEXT, fontWeight: "700" },
+  line: { flex: 1, height: 1, backgroundColor: BORDER },
+  dividerText: { color: MUTED, fontWeight: "600" },
+  appleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+    backgroundColor: "#000",
+    paddingVertical: 12,
+    borderRadius: 12,
+    justifyContent: "center",
+  },
+  appleText: { color: "#fff", fontWeight: "700" },
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingVertical: 12,
+    borderRadius: 12,
+    justifyContent: "center",
+  },
+  googleText: { color: TEXT, fontWeight: "700" },
+  linkBtn: { marginTop: 14, alignItems: "center" },
+  linkText: { color: TEXT, fontSize: 15 },
 });

@@ -18,22 +18,16 @@ import {
 import { useRouter, useFocusEffect } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { useAuth } from "@/src/auth/AuthProvider";
-import {
-  searchProductsByName,
-  getProductMediaUrls,
-  Product,
-} from "@/src/api/productService.mobile";
+import { searchProductsByName, getProductMediaUrls, Product } from "@/src/api/productService.mobile";
 import TabBar from "@/src/ui/TabBar";
-
-const SHOW_PROMO = true;
-const SHOW_CATEGORIES = true;
 
 const BG = "#ffffff";
 const CARD = "#ffffff";
 const TEXT = "#111111";
 const SUBTEXT = "#6b7280";
 const BORDER = "#e5e7eb";
-const ACCENT = "#3d36feff";
+const ACCENT = "#5a63d1";
+const RED = "#dc2626";
 
 const BANNERS = [
   "https://cloud.sellpoint.pp.ua/media/adds-photos/ad_2.png",
@@ -42,12 +36,11 @@ const BANNERS = [
 ];
 const BANNER_INTERVAL_MS = 3800;
 const BANNER_RATIO = 360 / 140;
-const RECS_LIMIT = 19;
+const RECS_LIMIT = 18;
 
 export default function Home() {
-  const { reload } = useAuth();
+  const { reload, ready, me } = useAuth();
   const router = useRouter();
-  const { ready, me } = useAuth();
 
   const [query, setQuery] = React.useState("");
   const [items, setItems] = React.useState<Product[]>([]);
@@ -66,8 +59,8 @@ export default function Home() {
       { title: "Смартфони", icon: "mobile", onPress: go("/catalog?c=phones") },
       { title: "Аксесуари", icon: "headphones", onPress: go("/catalog?c=accessories") },
       { title: "Краса", icon: "heart-o", onPress: go("/catalog?c=beauty") },
-      { title: "Для дому", icon: "home", onPress: go("/catalog?c=home") },
       { title: "Спорт", icon: "bicycle", onPress: go("/catalog?c=sport") },
+      { title: "Електроніка", icon: "bolt", onPress: go("/catalog?c=tech") },
     ],
     []
   );
@@ -89,7 +82,6 @@ export default function Home() {
       ];
       const out: Product[] = [];
       const seen = new Set<string>();
-
       for (const pack of seedByLang) {
         for (const s of pack.q) {
           const part = await searchProductsByName(s, pack.lang);
@@ -127,9 +119,7 @@ export default function Home() {
       <StatusBar barStyle="dark-content" />
       <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
       >
         <View style={styles.header}>
           <View style={styles.searchWrap}>
@@ -168,13 +158,9 @@ export default function Home() {
         ) : ready && me ? (
           <View style={styles.welcomeCard}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.welcomeHi}>
-                Привіт{me.fullName ? `, ${me.fullName.split(" ")[0]}` : ""} 👋
-              </Text>
+              <Text style={styles.welcomeHi}>Привіт{me.fullName ? `, ${me.fullName.split(" ")[0]}` : ""} 👋</Text>
               <Text style={styles.welcomeSub}>
-                {me.emailConfirmed
-                  ? "Гарного шопінгу на SellPoint!"
-                  : "Підтвердіть e-mail, щоб оформляти замовлення"}
+                {me.emailConfirmed ? "Гарного шопінгу на SellPoint!" : "Підтвердіть e-mail, щоб оформляти замовлення"}
               </Text>
             </View>
             <Pressable onPress={go("/cart")} style={styles.chipPrimary}>
@@ -184,29 +170,24 @@ export default function Home() {
           </View>
         ) : null}
 
-        {SHOW_PROMO && (
-          <View style={styles.section}>
-            <BannerCarousel images={BANNERS} intervalMs={BANNER_INTERVAL_MS} />
-          </View>
-        )}
+        <View style={styles.section}>
+          <BannerCarousel images={BANNERS} intervalMs={BANNER_INTERVAL_MS} />
+        </View>
 
-        {SHOW_CATEGORIES && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Досліджуйте категорії</Text>
-            <View style={styles.chipsRow}>
-              {categories.map((c) => (
-                <Pressable key={c.title} onPress={c.onPress} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
-                  <FontAwesome name={c.icon as any} size={14} color={ACCENT} />
-                  <Text style={styles.chipText}>{c.title}</Text>
-                </Pressable>
-              ))}
-            </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Досліджуйте категорії</Text>
+          <View style={styles.chipsRow}>
+            {categories.map((c) => (
+              <Pressable key={c.title} onPress={c.onPress} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
+                <FontAwesome name={c.icon as any} size={14} color={ACCENT} />
+                <Text style={styles.chipText}>{c.title}</Text>
+              </Pressable>
+            ))}
           </View>
-        )}
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Для тебе</Text>
-
           {loading ? (
             <View style={styles.grid}>
               {Array.from({ length: 8 }).map((_, i) => (
@@ -247,7 +228,6 @@ function BannerCarousel({ images, intervalMs = 4000 }: { images: string[]; inter
   const scrollRef = React.useRef<ScrollView>(null);
   const [w, setW] = React.useState(0);
   const [index, setIndex] = React.useState(0);
-
   const h = w > 0 ? Math.max(140, Math.round(w / BANNER_RATIO)) : 160;
 
   React.useEffect(() => {
@@ -299,8 +279,25 @@ function BannerCarousel({ images, intervalMs = 4000 }: { images: string[]; inter
   );
 }
 
+function pseudoRating(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  const v = 3.5 + ((h % 140) / 140) * 1.4;
+  return Math.round(v * 10) / 10;
+}
+function pseudoReviewsCount(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 131 + id.charCodeAt(i)) >>> 0;
+  return 80 + (h % 160);
+}
+function discountPercent(oldPrice?: number, newPrice?: number) {
+  if (!oldPrice || !newPrice || newPrice >= oldPrice) return 0;
+  return Math.max(1, Math.round((1 - newPrice / oldPrice) * 100));
+}
+
 function ProductCard({ p, onPress }: { p: Product; onPress: () => void }) {
   const [img, setImg] = React.useState<string>("");
+  const [fav, setFav] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -320,6 +317,9 @@ function ProductCard({ p, onPress }: { p: Product; onPress: () => void }) {
   const discPrice = p.discountPrice ?? null;
   const hasDisc = typeof discPrice === "number" && discPrice > 0 && discPrice < price;
   const showPrice = hasDisc ? discPrice : price;
+  const rating = pseudoRating(p.id);
+  const reviews = pseudoReviewsCount(p.id);
+  const percent = hasDisc ? discountPercent(price, discPrice || undefined) : 0;
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.cardItem, pressed && { opacity: 0.95 }]}>
@@ -331,8 +331,26 @@ function ProductCard({ p, onPress }: { p: Product; onPress: () => void }) {
             <ActivityIndicator />
           </View>
         )}
+
+        {hasDisc ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>-{percent}%</Text>
+          </View>
+        ) : null}
+
+        <Pressable onPress={() => setFav((v) => !v)} style={styles.heartBtn} hitSlop={10}>
+          <FontAwesome name={fav ? "heart" : "heart-o"} size={18} color={fav ? RED : "#ffffff"} />
+        </Pressable>
       </View>
+
       <Text numberOfLines={2} style={styles.name}>{p.name}</Text>
+
+      <View style={styles.ratingRow}>
+        <FontAwesome name="star" size={12} color="#f59e0b" />
+        <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
+        <Text style={styles.ratingMuted}>· {reviews} відгуків</Text>
+      </View>
+
       <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 4 }}>
         <Text style={styles.price}>{formatPrice(showPrice)} ₴</Text>
         {hasDisc ? <Text style={styles.oldPrice}>{formatPrice(price)} ₴</Text> : null}
@@ -376,6 +394,7 @@ const styles = StyleSheet.create({
   },
   searchIconHitbox: { position: "absolute", left: 0, top: 0, bottom: 0, width: 40, justifyContent: "center", alignItems: "center" },
   searchIcon: { position: "absolute", left: 14, top: "50%", marginTop: Platform.select({ ios: -8, android: -8, default: -8 }) },
+
   authCard: {
     marginTop: 12,
     marginHorizontal: 12,
@@ -392,6 +411,7 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: "#fff", fontWeight: "800" },
   secondaryBtn: { flex: 1, borderWidth: 1.5, borderColor: ACCENT, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
   secondaryBtnText: { color: ACCENT, fontWeight: "800" },
+
   welcomeCard: {
     marginTop: 12,
     marginHorizontal: 12,
@@ -408,14 +428,10 @@ const styles = StyleSheet.create({
   welcomeSub: { color: SUBTEXT, marginTop: 2 },
   chipPrimary: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: ACCENT, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   chipPrimaryText: { color: "#fff", fontWeight: "800" },
+
   section: { paddingHorizontal: 12, marginTop: 16 },
-  bannerWrap: {
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: "#f8fafc",
-  },
+
+  bannerWrap: { borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: BORDER, backgroundColor: "#f8fafc" },
   dotsRow: {
     position: "absolute",
     right: 10,
@@ -427,13 +443,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: "#cbd5e1",
-  },
+  dot: { width: 6, height: 6, borderRadius: 999, backgroundColor: "#cbd5e1" },
   dotActive: { backgroundColor: ACCENT },
+
   sectionTitle: { color: TEXT, fontSize: 18, fontWeight: "800", marginBottom: 10 },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
@@ -448,12 +460,43 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
   },
   chipText: { color: TEXT, fontWeight: "700" },
+
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   skeleton: { width: "48%", aspectRatio: 170 / 220, backgroundColor: "#f3f4f6", borderRadius: 12 },
+
   cardItem: { width: "48%", backgroundColor: "#fff", borderWidth: 1, borderColor: BORDER, borderRadius: 12, padding: 10 },
   thumb: { width: "100%", aspectRatio: 170 / 170, borderRadius: 10, overflow: "hidden", backgroundColor: "#fff" },
+
+  badge: {
+    position: "absolute",
+    left: 8,
+    top: 8,
+    backgroundColor: RED,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  badgeText: { color: "#fff", fontWeight: "800", fontSize: 12 },
+
+  heartBtn: {
+    position: "absolute",
+    right: 8,
+    top: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+
   name: { color: TEXT, marginTop: 8 },
-  price: { color: TEXT, fontWeight: "800" },
+  ratingRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
+  ratingText: { color: TEXT, fontWeight: "700", fontSize: 12 },
+  ratingMuted: { color: SUBTEXT, fontSize: 12 },
+
+  price: { color: RED, fontWeight: "800" },
   oldPrice: { color: SUBTEXT, textDecorationLine: "line-through" },
+
   pressed: { opacity: 0.85 },
 });
